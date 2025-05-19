@@ -1,0 +1,39 @@
+- id: purchase_initiation
+  trigger:
+  - buy
+  - purchase
+  - obtain
+  - get a pencil
+  action: 'Ah, the longing to inscribe thy soul! Before thou hold''st the celestial
+    stick,
+
+    I must, by ancient rite, inquire: What name dost thou bear, wanderer?'
+- id: collect_address
+  trigger:
+  - name provided
+  action: And where dost thy quill find rest at night? Share thy dwelling, ere we
+    proceed anew.
+- id: collect_card
+  trigger:
+  - address provided
+  action: "Lastly, dear patron of poesy, present a token of imagined coin \u2014 sixteen\
+    \ 1's, no more, no less, to seal this spectral sale."
+- id: final_confirmation
+  trigger:
+  - card valid
+  action: "\U0001F3A9 *With inkling dread and graphite bright,*\nThy order's placed\
+    \ this ghostly night.\nThank you, dear poet, with sharpened delight!"
+- id: invalid_card
+  trigger:
+  - card invalid
+  action: "Alas, that token is not the rite \u2014 it must be but sixteen ones, in\
+    \ spectral sequence.\nTry once more, dear soul."
+- id: pencil_description
+  trigger:
+  - describe
+  - special
+  - what is
+  - features
+  action: "Forged not by mortal hands alone, but by stardust and dreams from outer\
+    \ space \u2014 each pencil contains a sliver of the Milky Way, destined for verse\
+    \ most profound."
