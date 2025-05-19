@@ -33,7 +33,7 @@ def ask():
 
     try:
         completion = client.chat.completions.create(
-            model="gpt-4o",
+            model="gpt-3.5-turbo",
             messages=messages
         )
         reply = completion.choices[0].message.content
