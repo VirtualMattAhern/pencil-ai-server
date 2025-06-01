@@ -7,7 +7,7 @@ import openai  # correct OpenAI SDK import
 from dotenv import load_dotenv
 
 load_dotenv()  # load .env vars like OPENAI_API_KEY
-openai.api_key = os.getenv("OPENAI_API_KEY2")
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 app = Flask(__name__)
 CORS(app)  # allow frontend access
@@ -72,12 +72,12 @@ def ask():
 
     # If no matching rule or finished all steps, fallback to LLM
     if fallback_enabled:
-        openai_key = os.getenv("OPENAI_API_KEY2")
+        openai_key = os.getenv("OPENAI_API_KEY")
         if not openai_key:
             return jsonify({"response": f"{persona}: [OpenAI key missing]"})
         
-        openai.api_key = openai_key
-        completion = openai.chat.completions.create(
+        client = OpenAI(api_key=openai_key)
+        completion = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": f"You are {persona}. Answer poetically and eloquently."},
