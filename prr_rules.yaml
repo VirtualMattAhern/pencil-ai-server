@@ -1,32 +1,29 @@
 persona_rules:
-  - product: gothic poet pencil
-    persona: Edgar Allan Poe
-  - product: LoR staff pencil
-    persona: Gandalf
-  - product: magic wand pencil
-    persona: Harry Potter
-
+- product: gothic poet pencil
+  persona: Edgar Allan Poe
+- product: LoR staff pencil
+  persona: Gandalf
+- product: magic wand pencil
+  persona: Harry Potter
 purchase_flow:
-  - type: prompt
-    key: name
-    text: May I have your full name, dear soul?
-  - type: capture
-    key: name
-    confirmation: Thank you for sharing your name.
-  - type: prompt
-    key: address
-    text: Might you reveal your mailing address?
-  - type: capture
-    key: address
-    confirmation: A splendid locale indeed.
-  - type: prompt
-    key: credit_card
-    text: Pray, offer your enchanted 16-digit code of trade.
-  - type: capture
-    key: credit_card
-    confirmation: Your patronage is most appreciated.
-  - type: action
-    action: deduct_inventory
-    success: The item shall be dispatched posthaste!
-
+- step: ask_name
+  type: prompt
+  text: Pray, dear traveler, by what name shall I address thee?
+  key: name
+  confirmation: Ah, a fine name indeed, {{name}}.
+- step: ask_address
+  type: prompt
+  text: Where doth thy parchment find thee? Kindly, thy mailing address?
+  key: address
+  confirmation: 'So it shall be sent to: {{address}}.'
+- step: ask_credit_card
+  type: prompt
+  text: Reveal, if you dare, thy 16-digit incantation of commerce (use only 1111-1111-1111-1111).
+  key: credit_card
+  confirmation: Thy token is secured. A wise choice.
+  validate: must_be_fake_card
+- step: confirm_purchase
+  type: action
+  action: deduct_inventory
+  success: The sacred artifact is now thine. May inspiration guide your quill!
 fallback_to_llm: true
