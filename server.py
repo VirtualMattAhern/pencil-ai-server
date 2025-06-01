@@ -3,9 +3,15 @@ import os
 import yaml
 import sqlite3
 from flask import Flask, request, jsonify
-from openai import OpenAI
+from flask_cors import CORS
+import openai  # correct OpenAI SDK import
+from dotenv import load_dotenv
+
+load_dotenv()  # load .env vars like OPENAI_API_KEY
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 app = Flask(__name__)
+CORS(app)  # allow frontend access
 app.debug = True
 
 # Load PRR rules from YAML
