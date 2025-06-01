@@ -7,7 +7,7 @@ import openai  # correct OpenAI SDK import
 from dotenv import load_dotenv
 
 load_dotenv()  # load .env vars like OPENAI_API_KEY
-openai.api_key = os.getenv("OPENAI_API_KEY")
+openai.api_key = os.getenv("OPENAI_API_KEY2")
 
 app = Flask(__name__)
 CORS(app)  # allow frontend access
@@ -72,7 +72,7 @@ def ask():
 
     # If no matching rule or finished all steps, fallback to LLM
     if fallback_enabled:
-        openai_key = os.getenv("OPENAI_API_KEY")
+        openai_key = os.getenv("OPENAI_API_KEY2")
         if not openai_key:
             return jsonify({"response": f"{persona}: [OpenAI key missing]"})
         
