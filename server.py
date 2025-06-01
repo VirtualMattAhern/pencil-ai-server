@@ -3,38 +3,26 @@ import yaml
 import sqlite3
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import openai  # correct OpenAI SDK import
+import openai
 from dotenv import load_dotenv
 
-load_dotenv()  # load .env vars like OPENAI_API_KEY
-openai.api_key = os.getenv("OPENAI_API_KEY")
+load_dotenv()
+openai.api_key = os.getenv("OPENAI_API_KEY2")
 
 app = Flask(__name__)
-CORS(app)  # allow frontend access
+CORS(app)
 app.debug = True
 
-# Load PRR rules from YAML
 with open("prr_rules.yaml", "r") as f:
     prr_rules = yaml.safe_load(f)
 
-# Load persona mapping from PRR
-persona_map = prr_rules["persona_rules"]
 purchase_flow = prr_rules["purchase_flow"]
 fallback_enabled = prr_rules.get("fallback_to_llm", True)
 
-# Connect to SQLite
 db_path = "hybrid_ai_app.db"
 conn = sqlite3.connect(db_path, check_same_thread=False)
 cursor = conn.cursor()
 
-# Get persona based on inventory selection
-def get_persona_for_product(product_name):
-    for rule in persona_map:
-        if rule["product"].lower() in product_name.lower():
-            return rule["persona"]
-    return "Default Persona"
-
-# Placeholder: simulate inventory deduction
 def deduct_inventory(product_name):
     cursor.execute("UPDATE inventory SET quantity = quantity - 1 WHERE LOWER(name) = LOWER(?)", (product_name,))
     conn.commit()
@@ -44,40 +32,32 @@ def ask():
     user_input = request.json.get("message", "").strip()
     session = request.json.get("session", {})
     history = session.get("history", [])
-    persona = session.get("persona", None)
+    persona = session.get("persona", "Edgar Allan Poe")
 
-    # Persona switching based on purchase intent
-    if "buy" in user_input.lower():
-        for rule in persona_map:
-            if rule["product"].lower() in user_input.lower():
-                persona = rule["persona"]
-                break
+    print(f"[DEBUG] User Input: {user_input}")
+    print(f"[DEBUG] Session State BEFORE processing: {session}")
 
-    # Process step-by-step prompts
     for step in purchase_flow:
         step_type = step.get("type")
         step_key = step.get("key")
 
         if step_type == "prompt" and step_key not in session:
+            print(f"[DEBUG] Prompting for: {step_key}")
             return jsonify({"response": f"{persona}: {step['text']}", "session": session})
 
         elif step_type == "capture" and step_key not in session:
             session[step_key] = user_input
+            print(f"[DEBUG] Captured '{step_key}' as '{user_input}'")
             return jsonify({"response": f"{persona}: {step['confirmation']}", "session": session})
 
         elif step_type == "action" and step.get("action") == "deduct_inventory":
             product = session.get("product", "")
             deduct_inventory(product)
+            print(f"[DEBUG] Deducted inventory for: {product}")
             return jsonify({"response": f"{persona}: {step['success']}", "session": session})
 
-    # If no matching rule or finished all steps, fallback to LLM
     if fallback_enabled:
-        openai_key = os.getenv("OPENAI_API_KEY")
-        if not openai_key:
-            return jsonify({"response": f"{persona}: [OpenAI key missing]"})
-        
-        client = OpenAI(api_key=openai_key)
-        completion = client.chat.completions.create(
+        completion = openai.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": f"You are {persona}. Answer poetically and eloquently."},
@@ -85,9 +65,10 @@ def ask():
             ]
         )
         reply = completion.choices[0].message.content
+        print(f"[DEBUG] Fallback LLM response: {reply}")
         return jsonify({"response": f"{persona}: {reply}", "session": session})
 
-    return jsonify({"response": f"{persona}: I could not understand that request."})
+    return jsonify({"response": f"{persona}: I could not understand that request.", "session": session})
 
 @app.route("/inventory", methods=["GET"])
 def inventory():
