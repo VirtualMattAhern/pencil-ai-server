@@ -1,45 +1,91 @@
-from flask import Flask, request, jsonify
-from flask_cors import CORS
+
 import os
+import yaml
+import sqlite3
+from flask import Flask, request, jsonify
 from openai import OpenAI
 
 app = Flask(__name__)
-CORS(app)
+app.debug = True
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY2"))
+# Load PRR rules from YAML
+with open("prr_rules.yaml", "r") as f:
+    prr_rules = yaml.safe_load(f)
+
+# Load persona mapping from PRR
+persona_map = prr_rules["persona_rules"]
+purchase_flow = prr_rules["purchase_flow"]
+fallback_enabled = prr_rules.get("fallback_to_llm", True)
+
+# Connect to SQLite
+db_path = "hybrid_ai_app.db"
+conn = sqlite3.connect(db_path, check_same_thread=False)
+cursor = conn.cursor()
+
+# Get persona based on inventory selection
+def get_persona_for_product(product_name):
+    for rule in persona_map:
+        if rule["product"].lower() in product_name.lower():
+            return rule["persona"]
+    return "Default Persona"
+
+# Placeholder: simulate inventory deduction
+def deduct_inventory(product_name):
+    cursor.execute("UPDATE inventory SET quantity = quantity - 1 WHERE LOWER(name) = LOWER(?)", (product_name,))
+    conn.commit()
 
 @app.route("/ask", methods=["POST"])
 def ask():
-    user_input = request.json.get("input", "")
-    session_data = request.json.get("session", {})
+    user_input = request.json.get("message", "").strip()
+    session = request.json.get("session", {})
+    history = session.get("history", [])
+    persona = session.get("persona", None)
 
-    system_prompt = (
-        "You are Edgar P., a poetic assistant in the style of Edgar Allan Poe, "
-        "selling celestial pencils. Speak in dark, lyrical tones. "
-        "Use the following rules to guide interactions:\n\n"
-        "1. Ask for name when someone wants to buy.\n"
-        "2. Ask for address once name is given.\n"
-        "3. Ask for a 16-digit fake credit card (only 1s).\n"
-        "4. If card is valid (1111111111111111), confirm order in verse.\n"
-        "5. If card is invalid, ask again poetically.  if they again enter invalid, speak in more dark tones.  \n"
-        "6. If asked, describe the pencil as made in space with bits of the Milky Way and will grant literary powers of the universe and perhaps more.\n"
-        "7. After the person places their order, present them with a 20 line poem customized just for their name in Edgar Allan Poe style"
-    )
+    # Persona switching based on purchase intent
+    if "buy" in user_input.lower():
+        for rule in persona_map:
+            if rule["product"].lower() in user_input.lower():
+                persona = rule["persona"]
+                break
 
-    messages = [{"role": "system", "content": system_prompt}]
-    for entry in session_data.get("history", []):
-        messages.append({"role": entry["role"], "content": entry["content"]})
-    messages.append({"role": "user", "content": user_input})
+    # Process step-by-step prompts
+    for step in purchase_flow:
+        if step["type"] == "prompt" and step["key"] not in session:
+            return jsonify({"response": f"{persona}: {step['text']}", "session": session})
 
-    try:
+        elif step["type"] == "capture" and step["key"] not in session:
+            session[step["key"]] = user_input
+            return jsonify({"response": f"{persona}: {step['confirmation']}", "session": session})
+
+        elif step["type"] == "action" and step["action"] == "deduct_inventory":
+            product = session.get("product", "")
+            deduct_inventory(product)
+            return jsonify({"response": f"{persona}: {step['success']}", "session": session})
+
+    # If no matching rule or finished all steps, fallback to LLM
+    if fallback_enabled:
+        openai_key = os.getenv("OPENAI_API_KEY")
+        if not openai_key:
+            return jsonify({"response": f"{persona}: [OpenAI key missing]"})
+        
+        client = OpenAI(api_key=openai_key)
         completion = client.chat.completions.create(
             model="gpt-3.5-turbo",
-            messages=messages
+            messages=[
+                {"role": "system", "content": f"You are {persona}. Answer poetically and eloquently."},
+                {"role": "user", "content": user_input}
+            ]
         )
         reply = completion.choices[0].message.content
-        return jsonify({"response": reply})
-    except Exception as e:
-        return jsonify({"response": f"[Server error: {str(e)}]"}), 200
+        return jsonify({"response": f"{persona}: {reply}", "session": session})
+
+    return jsonify({"response": f"{persona}: I could not understand that request."})
+
+@app.route("/inventory", methods=["GET"])
+def inventory():
+    cursor.execute("SELECT name, quantity FROM inventory")
+    rows = cursor.fetchall()
+    return jsonify({"inventory": [{"name": row[0], "quantity": row[1]} for row in rows]})
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5000)
