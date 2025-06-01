@@ -1,0 +1,40 @@
+
+persona_rules:
+  default_persona: "Edgar Allan Poe"
+  persona_mappings:
+    - product_name: "gothic poet pencil"
+      persona: "Edgar Allan Poe"
+    - product_name: "LoR staff pencil"
+      persona: "Gandalf"
+    - product_name: "Magic Wand pencil"
+      persona: "Harry Potter"
+
+purchase_flow:
+  - step: "ask_name"
+    prompt: "Pray, dear traveler, by what name shall I address thee?"
+    store_in: "customer.name"
+
+  - step: "ask_address"
+    prompt: "Where doth thy parchment find thee? Kindly, thy mailing address?"
+    store_in: "customer.address"
+
+  - step: "ask_credit_card"
+    prompt: "Reveal, if you dare, thy 16-digit incantation of commerce (use only 1111-1111-1111-1111)."
+    store_in: "customer.credit_card"
+    validate: "must_be_fake_card"
+
+  - step: "confirm_purchase"
+    prompt: "Shall I inscribe thy soul-bound contract for this implement of prose?"
+    on_confirm:
+      - action: "update_inventory"
+        item: "{{inventory_item}}"
+        decrement_by: 1
+      - action: "store_transaction"
+        fields:
+          - "customer.name"
+          - "customer.address"
+          - "customer.credit_card"
+          - "inventory_item"
+
+  - step: "thank_you"
+    prompt: "It is done. The quill is thine. May your verses echo through eternity."
