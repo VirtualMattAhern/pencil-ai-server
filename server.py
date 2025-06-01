@@ -56,17 +56,20 @@ def ask():
 
     # Process step-by-step prompts
     for step in purchase_flow:
-        if step["type"] == "prompt" and step["key"] not in session:
-            return jsonify({"response": f"{persona}: {step['text']}", "session": session})
+        step_type = step.get("type")
+        step_key = step.get("key")
 
-        elif step["type"] == "capture" and step["key"] not in session:
-            session[step["key"]] = user_input
-            return jsonify({"response": f"{persona}: {step['confirmation']}", "session": session})
+       if step_type == "prompt" and step_key not in session:
+           return jsonify({"response": f"{persona}: {step['text']}", "session": session})
 
-        elif step["type"] == "action" and step["action"] == "deduct_inventory":
-            product = session.get("product", "")
-            deduct_inventory(product)
-            return jsonify({"response": f"{persona}: {step['success']}", "session": session})
+       elif step_type == "capture" and step_key not in session:
+           session[step_key] = user_input
+           return jsonify({"response": f"{persona}: {step['confirmation']}", "session": session})
+
+       elif step_type == "action" and step.get("action") == "deduct_inventory":
+           product = session.get("product", "")
+           deduct_inventory(product)
+           return jsonify({"response": f"{persona}: {step['success']}", "session": session})
 
     # If no matching rule or finished all steps, fallback to LLM
     if fallback_enabled:
