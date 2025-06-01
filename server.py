@@ -76,8 +76,8 @@ def ask():
         if not openai_key:
             return jsonify({"response": f"{persona}: [OpenAI key missing]"})
         
-        client = OpenAI(api_key=openai_key)
-        completion = client.chat.completions.create(
+        openai.api_key = openai_key
+        completion = openai.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": f"You are {persona}. Answer poetically and eloquently."},
