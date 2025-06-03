@@ -6,8 +6,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import openai
 from dotenv import load_dotenv
-import logging
-logging.basicConfig(filename='server.log', level=logging.DEBUG)
+
 
 load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY2")
