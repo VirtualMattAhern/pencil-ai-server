@@ -7,7 +7,6 @@ from flask_cors import CORS
 import openai
 from dotenv import load_dotenv
 
-
 load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY2")
 
@@ -19,13 +18,12 @@ app.debug = True
 with open("prr_rules.yaml", "r") as f:
     prr_rules = yaml.safe_load(f)
 
-persona_map = prr_rules["persona_rules"]
-purchase_flow = prr_rules["purchase_flow"]
+persona_map = prr_rules.get("persona_rules", [])
+purchase_flow = prr_rules.get("purchase_flow", [])
 fallback_enabled = prr_rules.get("fallback_to_llm", True)
 
-# Connect to SQLite
-db_path = "hybrid_ai_app.db"
-conn = sqlite3.connect(db_path, check_same_thread=False)
+# Connect to DB
+conn = sqlite3.connect("hybrid_ai_app.db", check_same_thread=False)
 cursor = conn.cursor()
 
 def get_persona_for_product(product_name):
@@ -35,62 +33,62 @@ def get_persona_for_product(product_name):
     return "Default Persona"
 
 def deduct_inventory(product_name):
-    print(f"[debug] Deducting 1 from inventory for: {product_name}")
     cursor.execute("UPDATE inventory SET quantity = quantity - 1 WHERE LOWER(name) = LOWER(?)", (product_name,))
     conn.commit()
 
 @app.route("/ask", methods=["POST"])
 def ask():
     user_input = request.json.get("message", "").strip()
-    session = request.json.get("session", {})
+    session = request.json.get("session", {}) or {}
     history = session.get("history", [])
-    persona = session.get("persona", None)
+    persona = session.get("persona", "Edgar Allan Poe")
 
-    print(f"[debug] User input: {user_input}")
-    print(f"[debug] Session before processing: {session}")
-
+    # Auto-persona switch
     if "buy" in user_input.lower():
         for rule in persona_map:
             if rule["product"].lower() in user_input.lower():
                 persona = rule["persona"]
                 session["persona"] = persona
                 session["product"] = rule["product"]
-                print(f"[debug] Persona set to: {persona} for product: {rule['product']}")
-                break
 
+    # Process flow
     for step in purchase_flow:
         step_type = step.get("type")
         step_key = step.get("key")
 
         if step_type == "prompt" and step_key not in session:
-            print(f"[debug] Prompting for step: {step_key}")
-            return jsonify({"response": f"{persona}: {step['text']}", "session": session})
+            return jsonify({
+                "response": f"{persona}: {step['text']}",
+                "session": session
+            })
 
         elif step_type == "capture" and step_key not in session:
             session[step_key] = user_input
-            print(f"[debug] Captured {step_key}: {user_input}")
-            return jsonify({"response": f"{persona}: {step['confirmation']}", "session": session})
+            return jsonify({
+                "response": f"{persona}: {step['confirmation']}",
+                "session": session
+            })
 
         elif step_type == "action" and step.get("action") == "deduct_inventory":
             product = session.get("product", "")
-            deduct_inventory(product)
-            return jsonify({"response": f"{persona}: {step['success']}", "session": session})
+            if product:
+                deduct_inventory(product)
+                return jsonify({
+                    "response": f"{persona}: {step['success']}",
+                    "session": session
+                })
 
+    # Fallback to LLM
     if fallback_enabled:
-        try:
-            completion = openai.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": f"You are {persona}. Respond poetically and helpfully."},
-                    {"role": "user", "content": user_input}
-                ]
-            )
-            reply = completion.choices[0].message.content
-            print(f"[debug] LLM fallback response: {reply}")
-            return jsonify({"response": f"{persona}: {reply}", "session": session})
-        except Exception as e:
-            print(f"[error] LLM fallback failed: {str(e)}")
-            return jsonify({"response": f"{persona}: [LLM Error: {str(e)}]", "session": session})
+        completion = openai.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": f"You are {persona}. Respond poetically."},
+                {"role": "user", "content": user_input}
+            ]
+        )
+        reply = completion.choices[0].message.content
+        return jsonify({"response": f"{persona}: {reply}", "session": session})
 
     return jsonify({"response": f"{persona}: I could not understand that request.", "session": session})
 
