@@ -14,12 +14,15 @@ app = Flask(__name__)
 CORS(app)
 app.debug = True
 
-# Load PRR rules from YAML
-with open("prr_rules.yaml", "r") as f:
-    prr_rules = yaml.safe_load(f)
+try:
+    with open("prr_rules.yaml", "r") as f:
+        prr_rules = yaml.safe_load(f)
+except Exception as e:
+    print(f"[ERROR] Failed to load PRR YAML: {e}")
+    prr_rules = {}
 
-persona_map = prr_rules["persona_rules"]
-purchase_flow = prr_rules["purchase_flow"]
+persona_map = prr_rules.get("persona_rules", [])
+purchase_flow = prr_rules.get("purchase_flow", [])
 fallback_enabled = prr_rules.get("fallback_to_llm", True)
 
 db_path = "hybrid_ai_app.db"
@@ -38,54 +41,59 @@ def deduct_inventory(product_name):
 
 @app.route("/ask", methods=["POST"])
 def ask():
-    user_input = request.json.get("message", "").strip()
-    session = request.json.get("session", {})
-    history = session.get("history", [])
-    persona = session.get("persona", None)
+    try:
+        user_input = request.json.get("message", "").strip()
+        session = request.json.get("session", {})
+        history = session.get("history", [])
+        persona = session.get("persona", None)
 
-    # Persona switching based on purchase intent
-    if "buy" in user_input.lower():
-        for rule in persona_map:
-            if rule["product"].lower() in user_input.lower():
-                persona = rule["persona"]
-                session["persona"] = persona
-                session["product"] = rule["product"]
-                break
+        if "buy" in user_input.lower():
+            for rule in persona_map:
+                if rule["product"].lower() in user_input.lower():
+                    persona = rule["persona"]
+                    session["persona"] = persona
+                    session["product"] = rule["product"]
+                    break
 
-    # Check for active prompt key
-    active_key = session.get("active_prompt")
-    if active_key:
-        print(f"[debug] Capturing response for prompt key: {active_key}")
-        session[active_key] = user_input
-        session.pop("active_prompt", None)
+        for step in purchase_flow:
+            step_type = step.get("type")
+            step_key = step.get("key")
 
-    # Go through purchase flow rules
-    for step in purchase_flow:
-        step_type = step.get("type")
-        step_key = step.get("key")
+            if step_type == "prompt" and step_key not in session:
+                print(f"[DEBUG] Prompting for key '{step_key}'")
+                return jsonify({"response": f"{persona}: {step['text']}", "session": session})
 
-        if step_type == "prompt" and step_key not in session:
-            session["active_prompt"] = step_key
-            return jsonify({"response": f"{persona}: {step['text']}", "session": session})
+            elif step_type == "capture" and step_key not in session:
+                session[step_key] = user_input
+                print(f"[DEBUG] Captured '{step_key}' as '{user_input}'")
+                return jsonify({"response": f"{persona}: {step['confirmation']}", "session": session})
 
-        elif step_type == "action" and step.get("action") == "deduct_inventory":
-            product = session.get("product", "")
-            deduct_inventory(product)
-            return jsonify({"response": f"{persona}: {step['success']}", "session": session})
+            elif step_type == "action" and step.get("action") == "deduct_inventory":
+                product = session.get("product", "")
+                deduct_inventory(product)
+                print(f"[DEBUG] Deducted inventory for '{product}'")
+                return jsonify({"response": f"{persona}: {step['success']}", "session": session})
 
-    # Fallback to OpenAI LLM
-    if fallback_enabled:
-        completion = openai.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": f"You are {persona}. Answer poetically and eloquently."},
-                {"role": "user", "content": user_input}
-            ]
-        )
-        reply = completion.choices[0].message.content
-        return jsonify({"response": f"{persona}: {reply}", "session": session})
+        if fallback_enabled:
+            openai_key = os.getenv("OPENAI_API_KEY2")
+            if not openai_key:
+                return jsonify({"response": f"{persona}: [OpenAI key missing]"})
 
-    return jsonify({"response": f"{persona}: I could not understand that request."})
+            response = openai.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": f"You are {persona}. Answer poetically and eloquently."},
+                    {"role": "user", "content": user_input}
+                ]
+            )
+            reply = response.choices[0].message.content
+            print(f"[DEBUG] LLM Fallback reply: {reply}")
+            return jsonify({"response": f"{persona}: {reply}", "session": session})
+
+        return jsonify({"response": f"{persona}: I could not understand that request."})
+    except Exception as e:
+        print(f"[ERROR] Unhandled exception in /ask: {e}")
+        return jsonify({"response": "Something went wrong processing your request."})
 
 @app.route("/inventory", methods=["GET"])
 def inventory():
